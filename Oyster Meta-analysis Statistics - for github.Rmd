@@ -1,0 +1,672 @@
+---
+title: "Oyster Meta-Analysis"
+author: "Nick Ray"
+date: "10/8/2020"
+output: html_document
+---
+
+This code accompanies the manuscript "Meta-analysis of oyster impacts on coastal biogeochemistry" published in Nature Sustainability
+
+Jump to:
+meta-analysis and example figure code: Line 37
+compare sediment fluxes between species: Line 370
+compare sediment fluxes between habitats: Line 421
+publication bias analysis: Line 557
+
+Load the sediment data set first
+```{r}
+sed_flux = oyster_meta_excel_for_figshare
+##this dataset can be donwloaded via this link: https://figshare.com/articles/dataset/Meta-analysis_of_oyster_impacts_on_coastal_biogeochemistry/12488753 
+
+#or this link: https://doi.org/10.6084/m9.figshare.12488753 
+
+#the dataset contains three sheets. with this code, use just the second sheet (sediment fluxes)
+```
+
+
+Load the necessary packages
+```{r}
+library(metafor)
+library(meta)
+library(ggplot2)
+```
+
+This meta-analysis followed these methods:
+https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/#license
+
+Test the effect of oysters on sediment N2 flux
+```{r}
+#use n2/ar method studies only and random effect model with Hartung-Knapp-Sidik-Jonkman method
+n2_ar_sed = subset(sed_flux, n2_method == "n2_ar")
+
+m_n2_ar <- metacont(`n N2 Oys`,
+                 `Mean N2 Oys`,
+                 `SD N2 Oys`,
+                 `n N2 Ctrl`,
+                 `Mean N2 Ctrl`,
+                 `SD N2 Ctrl`,
+                  data=n2_ar_sed,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_n2_ar
+
+#print results in text file
+sink("n2_ar_results_rand.txt")
+print(m_n2_ar)
+sink()
+
+#####repeat for IPT
+ipt_sed = subset(sed_flux, n2_method == "IPT")
+
+m_n2_ipt <- metacont(`n N2 Oys`,
+                 `Mean N2 Oys`,
+                 `SD N2 Oys`,
+                 `n N2 Ctrl`,
+                 `Mean N2 Ctrl`,
+                 `SD N2 Ctrl`,
+                  data=ipt_sed,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_n2_ipt
+
+sink("n2_IPT_results_rand.txt")
+print(m_n2_ipt)
+sink()
+
+#make a nice ggplot of this
+#load the plot dataset
+n2_flux_fig_data_revised
+#this is an excel file where I pulled the values from the meta-analysis results, with the following columns:
+#column 1: "abbreviated_name" is the Abbreviated study name
+#column 2: "n2_g" is the calculated study g value
+#column 3: "n2_ci" is the confidence interval
+#this data is also available in the Supplementary Information pdf
+#here I only show the code for making one figure, but used the same approach for all sediment fluxes
+
+n2_forest = ggplot(n2_flux_fig_data_revised, aes(x = n2_g, y = abbreviated_name, group = habitat)) +
+  geom_vline(xintercept = 0, linetype = "solid")+ ###line at zero
+  geom_errorbarh(aes(xmin = n2_g-n2_ci, xmax = n2_g+n2_ci), width = 0.2)+
+  geom_point(aes(shape = habitat),col = "#8da0cb", size = 3)+
+  theme_classic()+
+  theme(axis.text.x =  element_text(size = 8,colour = "black"),
+        axis.text.y =  element_text(size = 8,colour = "black"),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text(size = 8, colour = "black"))+
+  scale_x_continuous(limits = c(-2,5.5))+
+  labs(x = expression(paste("N"[2]*" flux Effect (g)")))+
+  geom_vline(xintercept = 0.682, linetype = "dashed")+
+  annotate("text", x = 3.9, y = 13, label = "italic(g) == 0.682", parse = TRUE, size = 2.822)+
+  annotate("text", x = 3.9, y = 12, label = "95%CI = \u00B1 0.276", size = 2.822)+
+  annotate("text", x = 3.9, y = 11, label = "p < 0.001", size = 2.822)+
+  theme(legend.position = "none")
+
+n2_forest
+
+###print it
+ppi = 900
+png("n2_forest_plot.png", width = 3.5*ppi, height = 4.5*ppi, res = ppi)
+n2_forest
+print(n2_forest)
+dev.off()
+
+```
+
+
+Repeat for NH4
+```{r}
+#make table of just nh4 data
+nh4_dat = sed_flux[,c(1,8,16,17,18,19,20,21)]
+nh4_only = sed_flux[complete.cases(nh4_dat),]
+
+m_nh4 <- metacont(`n NH4 Oys`,
+                 `Mean NH4 Oys`,
+                 `SD NH4 Oys`,
+                 `n NH4 ctrl`,
+                 `Mean NH4 Ctrl`,
+                 `SD NH4 Ctrl`,
+                  data=nh4_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_nh4
+
+sink("nh4_results_rand.txt")
+print(m_nh4)
+sink()
+```
+
+And for Nox
+```{r}
+nox_dat = sed_flux[,c(1,8,52,53,54,55,56,57)]
+nox_only = sed_flux[complete.cases(nox_dat),]
+
+m_nox <- metacont(`n nox oys`,
+                 `mean nox oys`,
+                 `sd nox oys`,
+                 `n nox ctrl`,
+                 `mean nox ctrl`,
+                 `sd nox ctrl`,
+                  data=nox_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_nox
+
+sink("nox_results_rand.txt")
+print(m_nox)
+sink()
+```
+
+No3-
+```{r}
+no3_dat = sed_flux[,c(1,8,58,59,60,61,62,63)]
+no3_only = sed_flux[complete.cases(no3_dat),]
+
+m_no3 <- metacont(`n no3 oys`,
+                 `mean no3 oys`,
+                 `sd no3 oys`,
+                 `n no3 ctrl`,
+                 `mean no3 ctrl`,
+                 `sd no3 ctrl`,
+                  data=no3_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_no3
+
+sink("no3_results_rand.txt")
+print(m_no3)
+sink()
+```
+
+and no2-
+```{r}
+no2_dat = sed_flux[,c(1,8,64,65,66,67,68,69)]
+no2_only = sed_flux[complete.cases(no2_dat),]
+
+m_no2 <- metacont(`n no2 oys`,
+                 `mean no2 oys`,
+                 `sd no2 oys`,
+                 `n no2 ctrl`,
+                 `mean no2 ctrl`,
+                 `sd no2 ctrl`,
+                  data=no2_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_no2
+
+sink("no2_results_rand.txt")
+print(m_no2)
+sink()
+```
+
+
+Repeat for phosphate
+```{r}
+po4_dat = sed_flux[,c(1,8,34,35,36,37,38,39)]
+po4_only = sed_flux[complete.cases(po4_dat),]
+
+m_po4 <- metacont(`n P Oys`,
+                 `Mean P Oys`,
+                 `SD P Oys`,
+                 `n P Ctrl`,
+                 `Mean P Ctrl`,
+                 `SD P Ctrl`,
+                  data=po4_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_po4
+
+sink("po4_results_rand.txt")
+print(m_po4)
+sink()
+```
+
+
+Silica
+```{r}
+si_dat = sed_flux[,c(1,8,46,47,48,49,50,51)]
+si_only = sed_flux[complete.cases(si_dat),]
+
+
+m_si <- metacont(`n Si oys`,
+                 `mean si oys`,
+                 `sd Si oys`,
+                 `n Si ctrl`,
+                 `mean si ctrl`,
+                 `sd Si ctrl`,
+                  data=si_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_si
+
+sink("si_results_rand.txt")
+print(m_si)
+sink()
+
+```
+
+
+N2O
+```{r}
+n2o_dat = sed_flux[,c(1,8,22,23,24,25,26,27)]
+n2o_only = sed_flux[complete.cases(n2o_dat),]
+
+
+m_n2o <- metacont(`n N2O Oys`,
+                 `Mean N2O Oys`,
+                 `SD N2O Oys`,
+                 `n N2O Ctrl`,
+                 `Mean N2O Ctrl`,
+                 `SD N2O Ctrl`,
+                  data=n2o_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_n2o
+
+sink("n2o_results_rand.txt")
+print(m_n2o)
+sink()
+```
+
+
+Co2
+```{r}
+co2_dat = sed_flux[,c(1,8,28,29,30,31,32,33)]
+co2_only = sed_flux[complete.cases(co2_dat),]
+
+m_co2 <- metacont(`n CO2 Oys`,
+                 `Mean CO2 Oys`,
+                 `SD CO2 Oys`,
+                 `n CO2 Ctrl`,
+                 `Mean CO2 Ctrl`,
+                 `SD CO2 Ctrl`,
+                  data=co2_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_co2
+
+sink("co2_results_rand.txt")
+print(m_co2)
+sink()
+```
+
+
+CH4
+```{r}
+ch4_dat = sed_flux[,c(1,8,40,41,42,43,44,45)]
+ch4_only = sed_flux[complete.cases(ch4_dat),]
+
+m_ch4 <- metacont(`n ch4 oys`,
+                 `mean ch4 oys`,
+                 `sd ch4 oys`,
+                 `n ch4 ctrl`,
+                 `mean CH4 ctrl`,
+                 `sd CH4 ctrl`,
+                  data=ch4_only,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_ch4
+
+sink("ch4_results_rand.txt")
+print(m_ch4)
+sink()
+```
+
+
+
+Compare sediment fluxes between C. virginica and C. gigas habitats
+```{r}
+gigas_nuts = subset(sed_flux, Species == "Crassostrea gigas")
+virginica_nuts = subset(sed_flux, Species == "Crassostrea virginica")
+nuts_oyster_comp = rbind(gigas_nuts, virginica_nuts)
+
+nuts_oyster_comp_nh4 = na.omit(cbind(nuts_oyster_comp[,1],nuts_oyster_comp[,6], nuts_oyster_comp[,16:21]))
+
+m_species_nh4_comp <- metacont(`n NH4 Oys`,
+                 `Mean NH4 Oys`,
+                 `SD NH4 Oys`,
+                 `n NH4 ctrl`,
+                 `Mean NH4 Ctrl`,
+                 `SD NH4 Ctrl`,
+                  data=nuts_oyster_comp_nh4,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_species_nh4_comp
+
+subgroup.analysis.mixed.effects(m = m_species_nh4_comp, 
+                                subgroups = nuts_oyster_comp_nh4$Species)
+#the subgroup.analysis.mixed.effects command is in the dmetar file, or the source code can be downloaded here:https://raw.githubusercontent.com/MathiasHarrer/dmetar/master/R/subgroup_analyses_mixed_effects_function.R
+
+
+nuts_oyster_comp_po4 = na.omit(cbind(nuts_oyster_comp[,1], nuts_oyster_comp[,6],nuts_oyster_comp[,34:39]))
+m_oyster_po4_comp <- metacont(`n P Oys`,
+                 `Mean P Oys`,
+                 `SD P Oys`,
+                 `n P Ctrl`,
+                 `Mean P Ctrl`,
+                 `SD P Ctrl`,
+                  data=nuts_oyster_comp_po4,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_oyster_po4_comp
+
+subgroup.analysis.mixed.effects(m = m_oyster_po4_comp, 
+                                subgroups = nuts_oyster_comp_po4$Species, exclude = "none")
+```
+
+
+Next compare fluxes between oyster habitats (reef vs. aquaculture):
+```{r}
+#need to run the next code chunk to load the comparison function
+
+#for comparing N2 fluxes, use just the n2/Ar data
+n2_ar_sed = subset(sed_flux, n2_method == "n2_ar")
+
+#next pull out just reef and aqua habitat
+reef_n2 = subset(n2_ar_sed, Habitat == "Reef")
+aqua_n2 = subset(n2_ar_sed, Habitat == "Aquaculture")
+
+#also need to remove the Ayvazian data for the comparison as it is considered to be an outlier (see publication bias analysis below)
+reef_n2 = reef_n2[-c(11),]
+
+n2_comp_dat = rbind(reef_n2, aqua_n2)
+n2_comp_dat = as.data.frame(n2_comp_dat)
+
+
+#re-run the meta-analysis using just these two habitats
+m_n2_comp.raw <- metacont(`n N2 Oys`,
+                 `Mean N2 Oys`,
+                 `SD N2 Oys`,
+                 `n N2 Ctrl`,
+                 `Mean N2 Ctrl`,
+                 `SD N2 Ctrl`,
+                  data=n2_comp_dat,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_n2_comp.raw
+
+subgroup.analysis.mixed.effects(m = m_n2_comp.raw, 
+                                subgroups = n2_comp_dat$Habitat, exclude = "none")
+
+
+
+######### repeat this for NH4 and PO4
+reef_nuts = subset(sed_flux, Habitat == "Reef")
+aqua_nuts = subset(sed_flux, Habitat == "Aquaculture")
+nuts_comp = rbind(reef_nuts, aqua_nuts)
+
+nuts_comp_nh4 = na.omit(cbind(nuts_comp[,1], nuts_comp[,8],nuts_comp[,16:21]))
+
+m_nh4_comp <- metacont(`n NH4 Oys`,
+                 `Mean NH4 Oys`,
+                 `SD NH4 Oys`,
+                 `n NH4 ctrl`,
+                 `Mean NH4 Ctrl`,
+                 `SD NH4 Ctrl`,
+                  data=nuts_comp_nh4,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_nh4_comp
+
+subgroup.analysis.mixed.effects(m = m_nh4_comp, 
+                                subgroups = nuts_comp_nh4$Habitat)
+
+
+nuts_comp_nox = na.omit(cbind(nuts_comp[,1], nuts_comp[,8],nuts_comp[,52:57]))
+
+m_nox_comp <- metacont(`n nox oys`,
+                 `mean nox oys`,
+                 `sd nox oys`,
+                 `n nox ctrl`,
+                 `mean nox ctrl`,
+                 `sd nox ctrl`,
+                  data=nuts_comp_nox,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_nox_comp
+
+subgroup.analysis.mixed.effects(m = m_nox_comp, 
+                                subgroups = nuts_comp_nox$Habitat)
+
+
+nuts_comp_no3 = na.omit(cbind(nuts_comp[,1], nuts_comp[,8],nuts_comp[,58:63]))
+
+m_no3_comp <- metacont(`n no3 oys`,
+                 `mean no3 oys`,
+                 `sd no3 oys`,
+                 `n no3 ctrl`,
+                 `mean no3 ctrl`,
+                 `sd no3 ctrl`,
+                  data=nuts_comp_no3,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_no3_comp
+
+subgroup.analysis.mixed.effects(m = m_no3_comp, 
+                                subgroups = nuts_comp_no3$Habitat)
+
+
+
+nuts_comp_po4 = na.omit(cbind(nuts_comp[,1], nuts_comp[,8],nuts_comp[,34:39]))
+m_po4_comp <- metacont(`n P Oys`,
+                 `Mean P Oys`,
+                 `SD P Oys`,
+                 `n P Ctrl`,
+                 `Mean P Ctrl`,
+                 `SD P Ctrl`,
+                  data=nuts_comp_po4,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_po4_comp
+
+subgroup.analysis.mixed.effects(m = m_po4_comp, 
+                                subgroups = nuts_comp_po4$Habitat, exclude = "none")
+```
+
+
+
+--------------------------------------
+Publiction Bias Analysis (based on:https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/publication-bias.html)
+
+load dmetar library
+```{r}
+library(dmetar)
+library(robvis)
+library(stringr)
+library(poibin)
+library(ggrepel)
+```
+
+Look for outliers in the N2_Ar meta analysis
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_n2_ar)
+#it looks like Ayvazian et al. may be one
+
+#and should we exclude the outlier? USe Eggers test, and if it is significant, yes!
+eggers.test(x = m_n2_ar)
+
+#re-run and print model
+n2_ar_sed = subset(sed_flux, n2_method == "n2_ar")
+n2_ar_sed_no_out =n2_ar_sed[-c(18),]
+
+m_n2_ar_no_out <- metacont(`n N2 Oys`,
+                 `Mean N2 Oys`,
+                 `SD N2 Oys`,
+                 `n N2 Ctrl`,
+                 `Mean N2 Ctrl`,
+                 `SD N2 Ctrl`,
+                  data=n2_ar_sed_no_out,
+                  studlab=paste(abbreviated_name),
+                  comb.fixed = FALSE, #use fixed effect model?
+                  comb.random = TRUE, #use random effect model?
+                  method.tau = "SJ", #estimator to use for between study variance (SJ = Sidik-Jonkman)
+                  hakn = TRUE, #use Hartung-Knapp-Sidik-Jonkman method?
+                  prediction=TRUE,  #generate a 95% prediction interval
+                  sm="SMD") #smd indicates we are using Hedges g
+m_n2_ar_no_out
+
+#print results in text file
+sink("m_n2_ar_no_out.txt")
+print(m_n2_ar_no_out)
+sink()
+```
+
+Look for outliers in the IPT meta analysis
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_n2_ipt)
+eggers.test(x = m_n2_ipt)
+```
+
+Repeat for NH4
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_nh4)
+eggers.test(x = m_nh4)
+```
+
+Repeat for NOx
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_nox)
+eggers.test(x = m_nox)
+```
+
+For NO2
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_no2)
+eggers.test(x = m_no2)
+```
+
+For NO3
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_no3)
+eggers.test(x = m_no3)
+```
+
+For PO4
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_po4)
+eggers.test(x = m_po4)
+```
+
+For DSi
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_si)
+eggers.test(x = m_si)
+```
+
+For CO2
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_co2)
+eggers.test(x = m_co2)
+```
+
+For N2O
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_n2o)
+eggers.test(x = m_n2o)
+```
+
+For CH4
+```{r}
+#look for outliers based on between study heterogeneity
+find.outliers(m_ch4)
+eggers.test(x = m_ch4)
+```
+
